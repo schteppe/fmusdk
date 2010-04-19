@@ -13,12 +13,18 @@
  * for coexecution of many FMUs, stepping and debug support, user control
  * of parameter and start values etc. 
  * All this is missing here.
+ *
+ * Revision history
+ *  07.02.2010 initial version released in FMU SDK 1.0
+ *  05.03.2010 bug fix: removed strerror(GetLastError()) from error messages
+ *     
  * Free libraries and tools used to implement this simulator:
  *  - eXpat 2.0.1 XML parser, see http://expat.sourceforge.net
  *  - 7z.exe 4.57 zip and unzip tool, see http://www.7-zip.org
  * Copyright 2010 QTronic GmbH. All rights reserved. 
  * -------------------------------------------------------------------------
  */
+
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -50,23 +56,23 @@ static int unzip(const char *zipPath, const char *outPath) {
 
     // remember current directory
     if (!GetCurrentDirectory(BUFSIZE, cwd)) {
-        printf ("error: Could not get current directory: %s\n", strerror(GetLastError()));
+        printf ("error: Could not get current directory\n");
         return 0; // error
     }
         
     // change to %FMUSDK_HOME%\bin to find 7z.dll and 7z.exe
     if (!GetEnvironmentVariable("FMUSDK_HOME", binPath, BUFSIZE)) {
         if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-            printf ("error: Environment variable FMUSDK_HOME not defined.\n");
+            printf ("error: Environment variable FMUSDK_HOME not defined\n");
         }
         else {
-            printf ("error: Could not get value of FMUSDK_HOME: %s\n",strerror(GetLastError()));
+            printf ("error: Could not get value of FMUSDK_HOME\n");
         }
         return 0; // error       
     }
     strcat(binPath, "\\bin");
     if (!SetCurrentDirectory(binPath)) {
-        printf ("error: could not change to directory '%s': %s\n", binPath, strerror(GetLastError())); 
+        printf ("error: could not change to directory '%s'\n", binPath); 
         return 0; // error        
     }
    
@@ -99,7 +105,7 @@ static int unzip(const char *zipPath, const char *outPath) {
 static char* getFmuPath(const char* fmuFileName){
     OFSTRUCT fileInfo;
     if (HFILE_ERROR==OpenFile(fmuFileName, &fileInfo, OF_EXIST)) {
-        printf ("error: Could not open FMU '%s': %s\n", fmuFileName, strerror(GetLastError()));
+        printf ("error: Could not open FMU '%s'\n", fmuFileName);
         return NULL;
     }
     //printf ("full path to FMU: '%s'\n", fileInfo.szPathName); 
@@ -109,7 +115,7 @@ static char* getFmuPath(const char* fmuFileName){
 static char* getTmpPath() {
     char tmpPath[BUFSIZE];
     if(! GetTempPath(BUFSIZE, tmpPath)) {
-        printf ("error: Could not find temporary disk space: %d\n", strerror(GetLastError()));
+        printf ("error: Could not find temporary disk space\n");
         return NULL;
     }
     strcat(tmpPath, "fmu\\");
@@ -131,7 +137,7 @@ static void* getAdr(FMU *fmu, const char* functionName){
 static int loadDll(const char* dllPath, FMU *fmu) {
     HANDLE h = LoadLibrary(dllPath);
     if (!h) {
-        printf("error: Could not load %s: %s\n", dllPath, strerror(GetLastError()));
+        printf("error: Could not load %s\n", dllPath);
         return 0; // failure
     }
     fmu->dllHandle = h;
