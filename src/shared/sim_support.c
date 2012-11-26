@@ -316,6 +316,46 @@ void loadFMU(const char* fmuFileName) {
     free(tmpPath);
 }
 
+// Similar to loadFMU() but takes the fmu struct as an argument instead
+void loadFMU2(const char* fmuFileName, FMU* fmu) {
+    char* fmuPath;
+    char* tmpPath;
+    char* xmlPath;
+    char* dllPath;
+    
+    // get absolute path to FMU, NULL if not found
+    fmuPath = getFmuPath(fmuFileName);
+    if (!fmuPath) exit(EXIT_FAILURE);
+
+    // unzip the FMU to the tmpPath directory
+    tmpPath = getTmpPath();
+    if (!unzip(fmuPath, tmpPath)) exit(EXIT_FAILURE);
+
+    // parse tmpPath\modelDescription.xml
+    xmlPath = calloc(sizeof(char), strlen(tmpPath) + strlen(XML_FILE) + 1);
+    sprintf(xmlPath, "%s%s", tmpPath, XML_FILE);
+    fmu->modelDescription = parse(xmlPath);
+    free(xmlPath);
+    if (!fmu->modelDescription) exit(EXIT_FAILURE);
+    printModelDescription(fmu->modelDescription);
+
+    // load the FMU dll
+    dllPath = calloc(sizeof(char), strlen(tmpPath) + strlen(DLL_DIR) 
+            + strlen( getModelIdentifier(fmu->modelDescription)) +  strlen(DLL_SUFFIX) + 1);
+    sprintf(dllPath,"%s%s%s%s", tmpPath, DLL_DIR, getModelIdentifier(fmu->modelDescription), DLL_SUFFIX);
+    if (!loadDll(dllPath, &fmu)) {
+        // try the alternative directory and suffix
+        dllPath = calloc(sizeof(char), strlen(tmpPath) + strlen(DLL_DIR2) 
+                + strlen( getModelIdentifier(fmu->modelDescription)) +  strlen(DLL_SUFFIX2) + 1);
+        sprintf(dllPath,"%s%s%s%s", tmpPath, DLL_DIR2, getModelIdentifier(fmu->modelDescription), DLL_SUFFIX2);
+        if (!loadDll(dllPath, &fmu)) exit(EXIT_FAILURE); 
+    }
+
+    free(dllPath);
+    free(fmuPath);
+    free(tmpPath);
+}
+
 static void doubleToCommaString(char* buffer, double r){
     char* comma;
     sprintf(buffer, "%.16g", r);
