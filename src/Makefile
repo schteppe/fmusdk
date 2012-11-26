@@ -2,7 +2,8 @@
 
 EXECS = \
 	fmusim_cs \
-	fmusim_me
+	fmusim_me \
+	fmusim_cs_master
 
 # Build simulators for co_simulation and model_exchange and then build the .fmu files.
 all: $(EXECS)
@@ -13,6 +14,7 @@ clean:
 	rm -rf  *.dSYM
 	rm -f cosimulation/fmusim_cs/*.o
 	rm -f model_exchange/fmusim_me/*.o
+	rm -f model_exchange/fmusim_cs_master/*.o
 	(cd models; $(MAKE) clean)
 
 # Sources shared between co-simulation and model exchange
@@ -34,6 +36,13 @@ MODEL_EXCHANGE_DEPS = \
 	model_exchange/fmusim_me/fmi_me.h \
 	model_exchange/include/fmiModelFunctions.h \
 	model_exchange/include/fmiModelTypes.h
+
+# Dependencies for only fmusim_cs_master
+CO_SIMULATION_MASTER_DEPS = \
+	co_simulation/fmusim_cs/main.c \
+	co_simulation/fmusim_cs/fmi_cs.h \
+	co_simulation/include/fmiFunctions.h \
+	co_simulation/include/fmiPlatformTypes.h 
 
 # Dependencies shared between both fmusim_cs and fmusim_me
 SHARED_DEPS = \
@@ -58,6 +67,13 @@ fmusim_cs: $(CO_SIMULATION_DEPS) $(SHARED_DEPS)
 		co_simulation/fmusim_cs/main.c $(SHARED_SRCS) \
 		-o $@ -lexpat -ldl
 	cp fmusim_cs ../bin
+
+fmusim_cs_master: $(CO_SIMULATION_MASTER_DEPS) $(SHARED_DEPS)
+	$(CC) $(CFLAGS) -g -Wall -DFMI_COSIMULATION -Ico_simulation/fmusim_cs_master -Ico_simulation/include \
+		-Ishared \
+		co_simulation/fmusim_cs_master/main.c $(SHARED_SRCS) \
+		-o $@ -lexpat -ldl
+	cp fmusim_cs_master ../bin
 
 fmusim_me: $(MODEL_EXCHANGE_DEPS) $(SHARED_DEPS)
 	$(CC) $(CFLAGS) -g -Wall -Imodel_exchange/fmusim_me -Imodel_exchange/include -Ishared \

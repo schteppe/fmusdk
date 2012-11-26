@@ -3,6 +3,12 @@
 fmu
 *.o
 *.so
-source/fmusim/fmusim
+source/fmusim/fmusim_cs
+source/fmusim/fmusim_cs_master
+source/fmusim/fmusim_cs_me
 result.csv
-
+bin/fmusim*
+.#*
+src/fmusim_cs
+src/fmusim_cs_master
+src/fmusim_me
