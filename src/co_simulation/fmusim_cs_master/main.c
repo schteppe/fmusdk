@@ -46,6 +46,7 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
     const char** guid;                  // Array of string GUIDs; global unique id of each fmu
     fmiComponent* c;                    // Array of FMU instances
     fmiStatus fmiFlag;                  // return code of the fmu functions
+    fmiStatus status = fmiOK;           // return code of the fmu functions
     const char** fmuLocation;           // path to the fmu as URL, "file://C:\QTronic\sales"
     const char* mimeType = "application/x-fmu-sharedlibrary"; // denotes tool in case of tool coupling
     fmiReal timeout = 1000;             // wait period in milliseconds, 0 for unlimited wait period
@@ -92,7 +93,10 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
         
         // StopTimeDefined=fmiFalse means: ignore value of tEnd
         fmiFlag = fmus[i]->initializeSlave(c[i], tStart, fmiTrue, tEnd);
-        if (fmiFlag > fmiWarning)  return error("could not initialize model");
+        if (fmiFlag > fmiWarning){
+            printf("Could not initialize model %s",fmuFileNames[i]);
+            return 0;
+        }
         
         // output solution for time t0
         outputRow(fmus[i], c[i], tStart, files[i], separator, TRUE);  // output column names
@@ -101,11 +105,34 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
 
     // enter the simulation loop
     time = tStart;
-    while (time < tEnd) {
-        fmiFlag = fmus[0]->doStep(c[0], time, h, fmiTrue);
-        if (fmiFlag != fmiOK)  return error("could not complete simulation of the model");
+    while (time < tEnd && status==fmiOK) {
+
+        /*
+        //retrieve outputs
+        fmiGetReal(s1, ..., 1, &y1);
+        fmiGetReal(s2, ..., 1, &y2);
+        //set inputs
+        fmiSetReal(s1, ..., 1, &y2);
+        fmiSetReal(s2, ..., 1, &y1);
+        */
+
+        // Step all the FMUs
+        for(i=0; i<N; i++){
+            fmiFlag = fmus[i]->doStep(c[i], time, h, fmiTrue);
+            if(fmiFlag != fmiOK){
+                status = fmiFlag;
+                printf("doStep() of model %s didn't return fmiOK! Exiting...",fmuFileNames[i]);
+                return 0;
+            }
+        }
+
+        // Advance time
         time += h;
-        outputRow(fmus[0], c[0], time, files[0], separator, FALSE); // output values for this step
+
+        // Write to files
+        for(i=0; i<N; i++){
+            outputRow(fmus[i], c[i], time, files[i], separator, FALSE); // output values for this step
+        }
         nSteps++;
     }
     
