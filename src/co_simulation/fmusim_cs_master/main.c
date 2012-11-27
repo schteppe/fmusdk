@@ -117,18 +117,16 @@ int main(int argc, char *argv[]) {
     char csv_separator = ','; 
     parseArguments2(argc, argv, &N, &fileNames, &M, &connections, &tEnd, &h, &loggingOn, &csv_separator);
 
-    // Allocate FMU structs
+    // Allocate FMUs and load them
     FMU** fmus = (FMU**)calloc(sizeof(FMU*), N);
     for(i=0; i<N; i++){
         fmus[i] = (FMU*)calloc(sizeof(FMU),1);
+        loadFMU2(fileNames[i],fmus[i]);
     }
 
-    // parse command line arguments and load the FMU
-    loadFMU2(fileNames[0],fmus[0]);
-
     // run the simulation
-    printf("FMU Simulator: run '%s' from t=0..%g with step size h=%g, loggingOn=%d, csv separator='%c'\n", 
-            fileNames[0], tEnd, h, loggingOn, csv_separator);
+    printf("FMU Simulator: run %d FMU(s) with %d connection(s) from t=0..%g with h=%g, loggingOn=%d, csv separator='%c'\n", 
+            N, M, tEnd, h, loggingOn, csv_separator);
     simulate(fmus, N, tEnd, h, loggingOn, csv_separator);
     printf("CSV file '%s' written\n", RESULT_FILE);
 
