@@ -39,30 +39,30 @@ FMU fmu; // the fmu to simulate
 // time events are processed by reducing step size to exactly hit tNext.
 // state events are checked and fired only at the end of an Euler step. 
 // the simulator may therefore miss state events and fires state events typically too late.
-static int simulate(FMU* fmu, double tEnd, double h, fmiBoolean loggingOn, char separator) {
+static int simulate(FMU** fmus, int N, double tEnd, double h, fmiBoolean loggingOn, char separator) {
     double time;
-    double tStart = 0;               // start time
-    const char* guid;                // global unique id of the fmu
-    fmiComponent c;                  // instance of the fmu 
-    fmiStatus fmiFlag;               // return code of the fmu functions
-    const char* fmuLocation = NULL;  // path to the fmu as URL, "file://C:\QTronic\sales"
+    double tStart = 0;                  // start time
+    const char* guid;                   // global unique id of the fmu
+    fmiComponent c;                     // instance of the fmu 
+    fmiStatus fmiFlag;                  // return code of the fmu functions
+    const char* fmuLocation = NULL;     // path to the fmu as URL, "file://C:\QTronic\sales"
     const char* mimeType = "application/x-fmu-sharedlibrary"; // denotes tool in case of tool coupling
-    fmiReal timeout = 1000;          // wait period in milli seconds, 0 for unlimited wait period"
-    fmiBoolean visible = fmiFalse;   // no simulator user interface
-    fmiBoolean interactive = fmiFalse; // simulation run without user interaction
-    fmiCallbackFunctions callbacks;  // called by the model during simulation
-    ModelDescription* md;            // handle to the parsed XML file   
+    fmiReal timeout = 1000;             // wait period in milli seconds, 0 for unlimited wait period"
+    fmiBoolean visible = fmiFalse;      // no simulator user interface
+    fmiBoolean interactive = fmiFalse;  // simulation run without user interaction
+    fmiCallbackFunctions callbacks;     // called by the model during simulation
+    ModelDescription* md;               // handle to the parsed XML file   
     int nSteps = 0;
     FILE* file;
         
     // instantiate the fmu 
-    md = fmu->modelDescription;
+    md = fmus[0]->modelDescription;
     guid = getString(md, att_guid);
     callbacks.logger = fmuLogger;
     callbacks.allocateMemory = calloc;
     callbacks.freeMemory = free;
     callbacks.stepFinished = NULL; // fmiDoStep has to be carried out synchronously
-    c = fmu->instantiateSlave(getModelIdentifier(md), guid, fmuLocation, mimeType, 
+    c = fmus[0]->instantiateSlave(getModelIdentifier(md), guid, fmuLocation, mimeType, 
                               timeout, visible, interactive, callbacks, loggingOn);
     if (!c) return error("could not instantiate model");
 
@@ -74,26 +74,26 @@ static int simulate(FMU* fmu, double tEnd, double h, fmiBoolean loggingOn, char 
     }
     
     // StopTimeDefined=fmiFalse means: ignore value of tEnd
-    fmiFlag = fmu->initializeSlave(c, tStart, fmiTrue, tEnd);
+    fmiFlag = fmus[0]->initializeSlave(c, tStart, fmiTrue, tEnd);
     if (fmiFlag > fmiWarning)  return error("could not initialize model");
     
     // output solution for time t0
-    outputRow(fmu, c, tStart, file, separator, TRUE);  // output column names
-    outputRow(fmu, c, tStart, file, separator, FALSE); // output values
+    outputRow(fmus[0], c, tStart, file, separator, TRUE);  // output column names
+    outputRow(fmus[0], c, tStart, file, separator, FALSE); // output values
 
     // enter the simulation loop    
     time = tStart;
     while (time < tEnd) {
-        fmiFlag = fmu->doStep(c, time, h, fmiTrue);
+        fmiFlag = fmus[0]->doStep(c, time, h, fmiTrue);
         if (fmiFlag != fmiOK)  return error("could not complete simulation of the model");
         time += h;
-        outputRow(fmu, c, time, file, separator, FALSE); // output values for this step
+        outputRow(fmus[0], c, time, file, separator, FALSE); // output values for this step
         nSteps++;
     }
     
     // end simulation
-    fmiFlag = fmu->terminateSlave(c);
-    fmu->freeSlaveInstance(c);
+    fmiFlag = fmus[0]->terminateSlave(c);
+    fmus[0]->freeSlaveInstance(c);
   
     // print simulation summary 
     printf("Simulation from %g to %g terminated successful\n", tStart, tEnd);
@@ -104,28 +104,51 @@ static int simulate(FMU* fmu, double tEnd, double h, fmiBoolean loggingOn, char 
 
 int main(int argc, char *argv[]) {
     char* fmuFileName;
-    
-    // parse command line arguments and load the FMU
+    int i;
+    int N = 1;
+
+    // Try new argument parser
+    int *connections;
+    char **fileNames;
+    int M = 0;
     double tEnd = 1.0;
-    double h=0.1;
-    int loggingOn = 0;
-    char csv_separator = ';';
-    parseArguments(argc, argv, &fmuFileName, &tEnd, &h, &loggingOn, &csv_separator);
-    loadFMU2(fmuFileName,&fmu);
+    double h = 0.1;
+    int loggingOn = 1;
+    char csv_separator = ','; 
+    parseArguments2(argc, argv, &N, &fileNames, &M, &connections, &tEnd, &h, &loggingOn, &csv_separator);
+
+    // Allocate FMU structs
+    FMU** fmus = (FMU**)calloc(sizeof(FMU*), N);
+    for(i=0; i<N; i++){
+        fmus[i] = (FMU*)calloc(sizeof(FMU),1);
+    }
+
+    // parse command line arguments and load the FMU
+    loadFMU2(fileNames[0],fmus[0]);
 
     // run the simulation
     printf("FMU Simulator: run '%s' from t=0..%g with step size h=%g, loggingOn=%d, csv separator='%c'\n", 
-            fmuFileName, tEnd, h, loggingOn, csv_separator);
-    simulate(&fmu, tEnd, h, loggingOn, csv_separator);
+            fileNames[0], tEnd, h, loggingOn, csv_separator);
+    simulate(fmus, N, tEnd, h, loggingOn, csv_separator);
     printf("CSV file '%s' written\n", RESULT_FILE);
 
-    // release FMU 
+    // release FMU
+    for(i=0; i<N; i++){
 #ifdef _MSC_VER
-    FreeLibrary(fmu.dllHandle);
+        FreeLibrary(fmus[i]->dllHandle);
 #else
-    dlclose(fmu.dllHandle);
+        dlclose(fmus[i]->dllHandle);
 #endif
-    freeElement(fmu.modelDescription);
+        freeElement(fmus[i]->modelDescription);
+    }
+
+    // Free vars
+    for(i=0; i<N; i++){
+        free(fmus[i]);
+    }
+    free(fmus);
+    free(connections);
+
     return EXIT_SUCCESS;
 }
 

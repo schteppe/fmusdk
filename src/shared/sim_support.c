@@ -344,6 +344,7 @@ void loadFMU2(const char* fmuFileName, FMU* fmu) {
     sprintf(dllPath,"%s%s%s%s", tmpPath, DLL_DIR, getModelIdentifier(fmu->modelDescription), DLL_SUFFIX);
     if (!loadDll(dllPath, fmu)) {
         // try the alternative directory and suffix
+        free(dllPath);
         dllPath = calloc(sizeof(char), strlen(tmpPath) + strlen(DLL_DIR2) + strlen( getModelIdentifier(fmu->modelDescription)) +  strlen(DLL_SUFFIX2) + 1);
         sprintf(dllPath,"%s%s%s%s", tmpPath, DLL_DIR2, getModelIdentifier(fmu->modelDescription), DLL_SUFFIX2);
         if (!loadDll(dllPath, fmu)) exit(EXIT_FAILURE); 
@@ -556,6 +557,8 @@ int error(const char* message){
     return 0;
 }
 
+// Parse arguments on the form e.g.
+// ./executable my/fmu/path.fmu 5 0.1 0 c
 void parseArguments(int argc, char *argv[], char** fmuFileName, double* tEnd, double* h, int* loggingOn, char* csv_separator) {
     // parse command line arguments
     if (argc>1) {
@@ -601,6 +604,118 @@ void parseArguments(int argc, char *argv[], char** fmuFileName, double* tEnd, do
     }
 }
 
+/*
+  Parse arguments on the form e.g.
+  ./executable 2 my/fmu/path1.fmu my/fmu/path2.fmu 1 0 0 1 0 5 0.1 0 c
+   exec  numFMUs  fmuPaths[]  numConnections  connections[]  endTime  timeStep  loggingOn  csvSep
+*/ 
+void parseArguments2(int argc, char *argv[], int* N, char** fmuFileNames[], int* M, int** connections, double* tEnd, double* h, int* loggingOn, char* csv_separator) {
+
+    int pos = 1;
+    
+    // Get number of FMUs, N
+    if(argc > pos){
+        if (sscanf(argv[pos],"%d", N) != 1 || *N<0) {
+            printf("Error: The given number of FMUs N (%s) is not an integer larger than 0\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        pos++;
+    } else {
+        printf("Error: no number of FMUs (N) given\n");
+        printHelp2(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    // Get the filenames
+    if(argc > pos + *N){
+        int i;
+        *fmuFileNames = (char**)calloc(sizeof(char*),*N);
+        for(i=0; i < *N; i++){
+            *fmuFileNames[i] = argv[pos];
+            pos++;
+        }
+    } else {
+        printf("Error: The number of FMUs (N) does not match the given number of filenames...\n");
+        printHelp2(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    // Get number of connections, M
+    if(argc > pos){
+        if (sscanf(argv[pos],"%d", M) != 1 || *M<0) {
+            printf("Error: The given number of connections M (%s) is not an integer larger than 0\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        pos++;
+    } else {
+        printf("Error: no number of connections (M) given\n");
+        printHelp2(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    // Get connections
+    if(argc > pos + (*M) * 4){
+        int i;
+        int* conn = (int*)calloc(sizeof(int),(*M) * 4);
+        for(i=0; i < (*M) * 4; i++){
+            if (sscanf(argv[pos],"%d", &conn[i]) != 1 || conn[i]<0) {
+                printf("Error parsing connections...\n");
+                exit(EXIT_FAILURE);                
+            }
+            pos++;
+        }
+        *connections = conn;
+    } else {
+        printf("Error: The number of connections (M=%d) does not match the given number of connections...\n",*M);
+        printHelp2(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    // Get simulation end time
+    if (argc > pos) {
+        if (sscanf(argv[pos],"%lf", tEnd) != 1 || *tEnd<0) {
+            printf("error: The given end time (%s) is not a number larger than 0\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        pos++;
+    }
+
+    // Get step size
+    if (argc > pos) {
+        if (sscanf(argv[pos],"%lf", h) != 1) {
+            printf("error: The given stepsize (%s) is not a number\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        pos++;
+    }
+
+    // Get logging flag
+    if (argc > pos) {
+        if (sscanf(argv[pos],"%d", loggingOn) != 1 || *loggingOn<0 || *loggingOn>1) {
+            printf("error: The given logging flag (%s) is not boolean\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        pos++;
+    }
+    if (argc > pos) {
+        if (strlen(argv[pos]) != 1) {
+            printf("error: The given CSV separator char (%s) is not valid\n", argv[pos]);
+            exit(EXIT_FAILURE);
+        }
+        switch (argv[pos][0]) {
+            case 'c': *csv_separator = ','; break; // comma
+            case 's': *csv_separator = ';'; break; // semicolon
+            default:  *csv_separator = argv[pos][0]; break; // any other char
+        }
+        pos++;
+    }
+    if (argc > pos) {
+        printf("warning: Ignoring %d additional arguments: %s ...\n", argc-pos, argv[pos]);
+        printHelp2(argv[0]);
+        pos++;
+    }
+}
+
 void printHelp(const char* fmusim) {
     printf("command syntax: %s <model.fmu> <tEnd> <h> <loggingOn> <csv separator>\n", fmusim);
     printf("   <model.fmu> .... path to FMU, relative to current dir or absolute, required\n");
@@ -608,4 +723,21 @@ void printHelp(const char* fmusim) {
     printf("   <h> ............ step size of simulation, optional, defaults to 0.1 sec\n");
     printf("   <loggingOn> .... 1 to activate logging,   optional, defaults to 0\n");
     printf("   <csv separator>. separator in csv file,   optional, c for ';', s for';', defaults to c\n");
+}
+
+void printHelp2(const char* fmusim) {
+    printf("Command syntax: %s <N> <m0> <m1> ... <mN-1> <M> <fromIdx0> <fromValRef0> <toIdx0> <toValRef0> ... <tEnd> <h> <logOn> <csvSep>\n", fmusim);
+    printf("   <N> ............ Number of FMUs included, required\n");
+    printf("   <mK> ........... path to FMU, relative to current dir or absolute, required\n");
+    printf("   <M> ............ Number of connections, defaults to 0\n");
+    printf("   <fromIdxK> ..... Connection start FMU. Refers to one of the FMUs given earlier, 0=first etc.\n");
+    printf("   <fromValRefK> .. Connection output variable. Refers to a valueReference of FMU <fromIdxK>.\n");
+    printf("   <toIdxK> ....... Refers to one of the FMUs given earlier, 0=first etc.\n");
+    printf("   <fromValRefK> .. Connection input variable. Refers to a valueReference of FMU <toIdxK>.\n");
+    printf("   <tEnd> ......... end  time of simulation, optional, defaults to 1.0 sec\n");
+    printf("   <h> ............ step size of simulation, optional, defaults to 0.1 sec\n");
+    printf("   <loggingOn> .... 1 to activate logging,   optional, defaults to 0\n");
+    printf("   <csv separator>. separator in csv file,   optional, c for ';', s for';', defaults to c\n");
+    printf("Example with 2 FMUs, 1 connection from FMU0 (value reference 0) to FMU1 (value reference 0), tEnd=5, h=0.1, log=off, separator=commas:\n");
+    printf("   %s 2 fmu/cs/bouncingBall.fmu fmu/cs/bouncingBall.fmu 1 0 0 0 1 5 0.1 0 c\n",fmusim);
 }
