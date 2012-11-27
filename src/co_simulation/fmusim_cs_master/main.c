@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
     int loggingOn = 0;
     char csv_separator = ';';
     parseArguments(argc, argv, &fmuFileName, &tEnd, &h, &loggingOn, &csv_separator);
-    loadFMU2(fmuFileName,fmu);
+    loadFMU2(fmuFileName,&fmu);
 
     // run the simulation
     printf("FMU Simulator: run '%s' from t=0..%g with step size h=%g, loggingOn=%d, csv separator='%c'\n", 
