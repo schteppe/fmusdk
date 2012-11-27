@@ -39,82 +39,104 @@ FMU fmu; // the fmu to simulate
 // time events are processed by reducing step size to exactly hit tNext.
 // state events are checked and fired only at the end of an Euler step. 
 // the simulator may therefore miss state events and fires state events typically too late.
-static int simulate(FMU** fmus, int N, double tEnd, double h, fmiBoolean loggingOn, char separator) {
-    double time;
-    double tStart = 0;                  // start time
-    const char* guid;                   // global unique id of the fmu
-    fmiComponent c;                     // instance of the fmu 
+static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, int M, double tEnd, double h, fmiBoolean loggingOn, char separator) {
+    int i;
+    double time;                        // Current time
+    double tStart = 0;                  // Start time
+    const char** guid;                  // Array of string GUIDs; global unique id of each fmu
+    fmiComponent* c;                    // Array of FMU instances
     fmiStatus fmiFlag;                  // return code of the fmu functions
-    const char* fmuLocation = NULL;     // path to the fmu as URL, "file://C:\QTronic\sales"
+    const char** fmuLocation;           // path to the fmu as URL, "file://C:\QTronic\sales"
     const char* mimeType = "application/x-fmu-sharedlibrary"; // denotes tool in case of tool coupling
-    fmiReal timeout = 1000;             // wait period in milli seconds, 0 for unlimited wait period"
+    fmiReal timeout = 1000;             // wait period in milliseconds, 0 for unlimited wait period
     fmiBoolean visible = fmiFalse;      // no simulator user interface
     fmiBoolean interactive = fmiFalse;  // simulation run without user interaction
     fmiCallbackFunctions callbacks;     // called by the model during simulation
-    ModelDescription* md;               // handle to the parsed XML file   
-    int nSteps = 0;
-    FILE* file;
-        
+    ModelDescription** md;              // handle to the parsed XML file   
+    int nSteps = 0;                     // Number of steps taken
+    FILE** files;                       // result files
+    char** fileNames;                   // Result file names
+
+
+    // Allocate
+    c =           (fmiComponent*)calloc(sizeof(fmiComponent),N);
+    guid =        (const char**)calloc(sizeof(char*),N);
+    fmuLocation = (const char**)calloc(sizeof(char*),N);
+    md =          (ModelDescription**)calloc(sizeof(ModelDescription*),N);
+    files =       (FILE**)calloc(sizeof(FILE*),N);
+    fileNames =   (char**)calloc(sizeof(char*),N);
+
     // instantiate the fmu 
-    md = fmus[0]->modelDescription;
-    guid = getString(md, att_guid);
     callbacks.logger = fmuLogger;
     callbacks.allocateMemory = calloc;
     callbacks.freeMemory = free;
     callbacks.stepFinished = NULL; // fmiDoStep has to be carried out synchronously
-    c = fmus[0]->instantiateSlave(getModelIdentifier(md), guid, fmuLocation, mimeType, 
-                              timeout, visible, interactive, callbacks, loggingOn);
-    if (!c) return error("could not instantiate model");
 
-    // open result file
-    if (!(file=fopen(RESULT_FILE, "w"))) {
-        printf("could not write %s because:\n", RESULT_FILE);
-        printf("    %s\n", strerror(errno));
-        return 0; // failure
+    // Init all the FMUs
+    for(i=0; i<N; i++){
+        md[i] = fmus[i]->modelDescription;
+        guid[i] = getString(md[i], att_guid);
+        c[i] = fmus[i]->instantiateSlave(getModelIdentifier(md[i]), guid[i], fmuLocation[i], mimeType, timeout, visible, interactive, callbacks, loggingOn);
+        if (!c[i]) return error("could not instantiate model");
+
+        // Generate out file name like this: "resultN.csv" where N is the FMU index
+        fileNames[i] = calloc(sizeof(char),100);
+        sprintf(fileNames[i],"result%d.csv",i);
+
+        // open result file
+        if (!(files[i] = fopen(fileNames[i], "w"))) {
+            printf("could not write %s because:\n", fileNames[i]);
+            printf("    %s\n", strerror(errno));
+            return 0; // failure
+        }
+        
+        // StopTimeDefined=fmiFalse means: ignore value of tEnd
+        fmiFlag = fmus[i]->initializeSlave(c[i], tStart, fmiTrue, tEnd);
+        if (fmiFlag > fmiWarning)  return error("could not initialize model");
+        
+        // output solution for time t0
+        outputRow(fmus[i], c[i], tStart, files[i], separator, TRUE);  // output column names
+        outputRow(fmus[i], c[i], tStart, files[i], separator, FALSE); // output values
     }
-    
-    // StopTimeDefined=fmiFalse means: ignore value of tEnd
-    fmiFlag = fmus[0]->initializeSlave(c, tStart, fmiTrue, tEnd);
-    if (fmiFlag > fmiWarning)  return error("could not initialize model");
-    
-    // output solution for time t0
-    outputRow(fmus[0], c, tStart, file, separator, TRUE);  // output column names
-    outputRow(fmus[0], c, tStart, file, separator, FALSE); // output values
 
-    // enter the simulation loop    
+    // enter the simulation loop
     time = tStart;
     while (time < tEnd) {
-        fmiFlag = fmus[0]->doStep(c, time, h, fmiTrue);
+        fmiFlag = fmus[0]->doStep(c[0], time, h, fmiTrue);
         if (fmiFlag != fmiOK)  return error("could not complete simulation of the model");
         time += h;
-        outputRow(fmus[0], c, time, file, separator, FALSE); // output values for this step
+        outputRow(fmus[0], c[0], time, files[0], separator, FALSE); // output values for this step
         nSteps++;
     }
     
     // end simulation
-    fmiFlag = fmus[0]->terminateSlave(c);
-    fmus[0]->freeSlaveInstance(c);
+    for(i=0; i<N; i++){
+        fmiFlag = fmus[i]->terminateSlave(c[i]);
+        fmus[i]->freeSlaveInstance(c[i]);
+    }
   
     // print simulation summary 
     printf("Simulation from %g to %g terminated successful\n", tStart, tEnd);
     printf("  steps ............ %d\n", nSteps);
     printf("  fixed step size .. %g\n", h);
+    for(i=0; i<N; i++){
+        fclose(files[i]);
+        printf("CSV file '%s' written\n", fileNames[i]);
+    }
+
     return 1; // success
 }
 
 int main(int argc, char *argv[]) {
-    char* fmuFileName;
     int i;
     int N = 1;
-
-    // Try new argument parser
     int *connections;
     char **fileNames;
     int M = 0;
     double tEnd = 1.0;
     double h = 0.1;
     int loggingOn = 1;
-    char csv_separator = ','; 
+    char csv_separator = ',';
     parseArguments2(argc, argv, &N, &fileNames, &M, &connections, &tEnd, &h, &loggingOn, &csv_separator);
 
     // Allocate FMUs and load them
@@ -127,8 +149,7 @@ int main(int argc, char *argv[]) {
     // run the simulation
     printf("FMU Simulator: run %d FMU(s) with %d connection(s) from t=0..%g with h=%g, loggingOn=%d, csv separator='%c'\n", 
             N, M, tEnd, h, loggingOn, csv_separator);
-    simulate(fmus, N, tEnd, h, loggingOn, csv_separator);
-    printf("CSV file '%s' written\n", RESULT_FILE);
+    simulate(fmus, fileNames, N, connections, M, tEnd, h, loggingOn, csv_separator);
 
     // release FMU
     for(i=0; i<N; i++){

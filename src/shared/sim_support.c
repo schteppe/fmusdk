@@ -631,7 +631,7 @@ void parseArguments2(int argc, char *argv[], int* N, char** fmuFileNames[], int*
         int i;
         *fmuFileNames = (char**)calloc(sizeof(char*),*N);
         for(i=0; i < *N; i++){
-            *fmuFileNames[i] = argv[pos];
+            (*fmuFileNames)[i] = argv[pos];
             pos++;
         }
     } else {

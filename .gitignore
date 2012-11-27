@@ -6,7 +6,7 @@ fmu
 source/fmusim/fmusim_cs
 source/fmusim/fmusim_cs_master
 source/fmusim/fmusim_cs_me
-result.csv
+result*.csv
 bin/fmusim*
 .#*
 src/fmusim_cs
