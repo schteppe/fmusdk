@@ -75,7 +75,9 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
 
     // Init all the FMUs
     for(i=0; i<N; i++){
-        md[i] = fmus[i]->modelDescription;
+        md[i] = (ModelDescription*)fmus[i]->modelDescription;
+
+
         guid[i] = getString(md[i], att_guid);
         c[i] = fmus[i]->instantiateSlave(getModelIdentifier(md[i]), guid[i], fmuLocation[i], mimeType, timeout, visible, interactive, callbacks, loggingOn);
         if (!c[i]) return error("could not instantiate model");
@@ -101,20 +103,82 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
         // output solution for time t0
         outputRow(fmus[i], c[i], tStart, files[i], separator, TRUE);  // output column names
         outputRow(fmus[i], c[i], tStart, files[i], separator, FALSE); // output values
+
     }
 
     // enter the simulation loop
     time = tStart;
+    int k;
+    int l;
+    fmiReal r;
+    fmiInteger ii;
+    fmiBoolean b;
+    fmiString s;
+    fmiValueReference vrFrom;
+    fmiValueReference vrTo;
+    int found = 0;
     while (time < tEnd && status==fmiOK) {
 
         /*
-        //retrieve outputs
+        Basically do this to transfer values from output to input:
         fmiGetReal(s1, ..., 1, &y1);
         fmiGetReal(s2, ..., 1, &y2);
-        //set inputs
         fmiSetReal(s1, ..., 1, &y2);
         fmiSetReal(s2, ..., 1, &y1);
         */
+        int ci;
+        for(ci=0; ci<M; ci++){
+            found = 0;
+            int fmuFrom = connections[ci*4];
+            vrFrom =  (fmiValueReference)connections[ci*4 + 1];
+            int fmuTo =   connections[ci*4 + 2];
+            vrTo =    (fmiValueReference)connections[ci*4 + 3];
+            for (k=0; !found && fmus[fmuFrom]->modelDescription->modelVariables[k]; k++) {
+                ScalarVariable* svFrom = fmus[fmuFrom]->modelDescription->modelVariables[k];
+                if (getAlias(svFrom)!=enu_noAlias) continue;
+
+                // Is this the correct one?
+                if(vrFrom == getValueReference(svFrom)){
+
+                    // Now find the input variable
+                    for (l=0; !found && fmus[fmuTo]->modelDescription->modelVariables[l]; l++) {
+                        ScalarVariable* svTo = fmus[fmuTo]->modelDescription->modelVariables[l];
+                        if (getAlias(svTo)!=enu_noAlias) continue;
+
+                        // Found the input and output. Check if they have equal types
+                        if(svFrom->typeSpec->type == svFrom->typeSpec->type){
+
+                            // Same types! Transfer...
+                            switch (svFrom->typeSpec->type){
+                                case elm_Real:
+                                    fmus[fmuFrom]->getReal(c[fmuFrom], &vrFrom, 1, &r);
+                                    fmus[fmuTo  ]->setReal(c[fmuTo  ], &vrTo,   1, &r);
+                                    break;
+                                case elm_Integer:
+                                case elm_Enumeration:
+                                    fmus[fmuFrom]->getInteger(c[fmuFrom], &vrFrom, 1, &ii);
+                                    fmus[fmuTo  ]->setInteger(c[fmuTo  ], &vrTo,   1, &ii);
+                                    break;
+                                case elm_Boolean:
+                                    fmus[fmuFrom]->getBoolean(c[fmuFrom], &vrFrom, 1, &b);
+                                    fmus[fmuTo  ]->setBoolean(c[fmuTo  ], &vrTo,   1, &b);
+                                    break;
+                                case elm_String:
+                                    fmus[fmuFrom]->getString(c[fmuFrom], &vrFrom, 1, &s);
+                                    fmus[fmuTo  ]->setString(c[fmuTo  ], &vrTo,   1, &s);
+                                    break;
+                                default: 
+                                    printf("Unrecognized file type\n");
+                            }
+
+                            found = 1;
+                        } else {
+                            printf("Connection between FMU %d (value ref %d) and %d (value ref %d) had incompatible data types!\n",fmuFrom,vrFrom,fmuTo,vrTo);
+                        }
+                    }
+                }
+            }
+        }
 
         // Step all the FMUs
         for(i=0; i<N; i++){
