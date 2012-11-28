@@ -717,27 +717,38 @@ void parseArguments2(int argc, char *argv[], int* N, char** fmuFileNames[], int*
 }
 
 void printHelp(const char* fmusim) {
-    printf("command syntax: %s <model.fmu> <tEnd> <h> <loggingOn> <csv separator>\n", fmusim);
-    printf("   <model.fmu> .... path to FMU, relative to current dir or absolute, required\n");
-    printf("   <tEnd> ......... end  time of simulation, optional, defaults to 1.0 sec\n");
-    printf("   <h> ............ step size of simulation, optional, defaults to 0.1 sec\n");
-    printf("   <loggingOn> .... 1 to activate logging,   optional, defaults to 0\n");
-    printf("   <csv separator>. separator in csv file,   optional, c for ';', s for';', defaults to c\n");
+    printf("\n  Syntax: %s <fmuPath> <tEnd> <h> <loggingOn> <csvSep>\n", fmusim);
+    printf("\n");
+    printf("    <fmuPath> .... path to FMU, relative to current dir or absolute, required\n");
+    printf("    <tEnd> ....... end  time of simulation, optional, defaults to 1.0 sec\n");
+    printf("    <h> .......... step size of simulation, optional, defaults to 0.1 sec\n");
+    printf("    <loggingOn> .. 1 to activate logging, optional, defaults to 0\n");
+    printf("    <csvSep> ..... separator in csv file, optional, c for , s for ; default=c\n");
+    printf("\n");
+    printf("  Example running an FMU from t=0..5, tEnd=5, h=0.1, log=off, separator=commas:\n\n");
+    printf("    %s FMU.fmu 5 0.1 0 c\n",fmusim);
+    printf("\n");
 }
 
 void printHelp2(const char* fmusim) {
-    printf("Command syntax: %s <N> <m0> <m1> ... <mN-1> <M> <fromIdx0> <fromValRef0> <toIdx0> <toValRef0> ... <tEnd> <h> <logOn> <csvSep>\n", fmusim);
-    printf("   <N> ............ Number of FMUs included, required\n");
-    printf("   <mK> ........... path to FMU, relative to current dir or absolute, required\n");
-    printf("   <M> ............ Number of connections, defaults to 0\n");
-    printf("   <fromIdxK> ..... Connection start FMU. Refers to one of the FMUs given earlier, 0=first etc.\n");
-    printf("   <fromValRefK> .. Connection output variable. Refers to a valueReference of FMU <fromIdxK>.\n");
-    printf("   <toIdxK> ....... Refers to one of the FMUs given earlier, 0=first etc.\n");
-    printf("   <fromValRefK> .. Connection input variable. Refers to a valueReference of FMU <toIdxK>.\n");
-    printf("   <tEnd> ......... end  time of simulation, optional, defaults to 1.0 sec\n");
-    printf("   <h> ............ step size of simulation, optional, defaults to 0.1 sec\n");
-    printf("   <loggingOn> .... 1 to activate logging,   optional, defaults to 0\n");
-    printf("   <csv separator>. separator in csv file,   optional, c for ';', s for';', defaults to c\n");
-    printf("Example with 2 FMUs, 1 connection from FMU0 (value reference 0) to FMU1 (value reference 0), tEnd=5, h=0.1, log=off, separator=commas:\n");
-    printf("   %s 2 fmu/cs/bouncingBall.fmu fmu/cs/bouncingBall.fmu 1 0 0 0 1 5 0.1 0 c\n",fmusim);
+    printf("\n  Syntax: %s <N> <fmuPaths> <M> <connections> <tEnd> <h> <logOn> <csvSep>\n", fmusim);
+    printf("\n");
+    printf("    <N> ............ Number of FMUs included, required.\n");
+    printf("    <fmuPaths> ..... Paths to FMUs, space-separated, relative or absolute.\n");
+    printf("    <M> ............ Number of connections, defaults to 0.\n");
+    printf("    <connections> .. Connections given as 4*M space-separated integers. E.g.\n");
+    printf("                     <fromFMU> <fromValueRef> <toFMU> <toValueRef>\n");
+    printf("    <tEnd> ......... end  time of simulation, optional, defaults to 1.0 sec\n");
+    printf("    <h> ............ step size of simulation, optional, defaults to 0.1 sec\n");
+    printf("    <logOn> ........ 1 to activate logging,   optional, defaults to 0\n");
+    printf("    <csvSep>........ separator in csv file, optional, c for , s for ; default=c\n");
+    printf("\n");
+    printf("  Note that each connection is specified with four space-separated integers.\n  If you have M connections, there need to be 4*M of them.\n");
+    printf("\n");
+    printf("  Example with 2 FMUs, 1 connection from FMU0 (value reference 0) to FMU1 (value\n  reference 0), tEnd=5, h=0.1, log=off, separator=commas:\n\n");
+    printf("    %s 2 fmu/cs/bouncingBall.fmu fmu/cs/bouncingBall.fmu 1 0 0 1 0 5 0.1 0 c\n",fmusim);
+    printf("\n");
+    printf("  Example with one FMU, 2 connections from valueref 0 to 1 and 2 to 3,\n  tEnd=10, h=0.001, log=on, separator=semicolon:\n\n");
+    printf("    %s 1 fmu/cs/bouncingBall.fmu 2 0 0 0 1 0 2 0 3 10 0.001 1 s\n",fmusim);
+    printf("\n");
 }
