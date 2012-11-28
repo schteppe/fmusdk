@@ -148,6 +148,8 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
                         // Found the input and output. Check if they have equal types
                         if(svFrom->typeSpec->type == svFrom->typeSpec->type){
 
+                            //printf("Connection %d at T=%g: Transferring value from FMU%d (vr=%d) to FMU%d (vr=%d)\n",ci,time,fmuFrom,vrFrom,fmuTo,vrTo);
+
                             // Same types! Transfer...
                             switch (svFrom->typeSpec->type){
                                 case elm_Real:
@@ -168,7 +170,7 @@ static int simulate(FMU** fmus, char* fmuFileNames[], int N, int* connections, i
                                     fmus[fmuTo  ]->setString(c[fmuTo  ], &vrTo,   1, &s);
                                     break;
                                 default: 
-                                    printf("Unrecognized file type\n");
+                                    printf("Unrecognized variable datatype of FMU%d (vr=%d)\n",fmuFrom,vrFrom);
                             }
 
                             found = 1;
